@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "A11y Simulator",
+  "version": "1.0.0",
+  "description": "Developer tool to test accessibility: keyboard-only navigation, screen reader simulation, tab order, and WCAG checks",
+  "action": {
+    "default_popup": "popup/index.html",
+    "default_title": "A11y Simulator"
+  },
+  "background": {
+    "service_worker": "background/index.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/index.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "side_panel": {
+    "default_path": "sidepanel/index.html"
+  },
+  "permissions": ["activeTab", "storage", "sidePanel"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}

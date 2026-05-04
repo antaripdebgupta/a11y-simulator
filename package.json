@@ -1,0 +1,55 @@
+{
+  "name": "a11y-simulator",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Developer tool to test accessibility: keyboard-only navigation, screen reader simulation, tab order, and WCAG checks",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite build --watch --mode development",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext .ts,.tsx",
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\"",
+    "type-check": "tsc --noEmit",
+    "prepare": "husky install"
+  },
+  "keywords": [
+    "chrome-extension",
+    "accessibility",
+    "a11y",
+    "keyboard-navigation",
+    "screen-reader",
+    "tab-order",
+    "wcag",
+    "typescript",
+    "react",
+    "vite",
+    "mv3"
+  ],
+  "dependencies": {
+    "axe-core": "^4.11.4",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/chrome": "^0.1.40",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/eslint-plugin": "^8.59.1",
+    "@typescript-eslint/parser": "^8.59.1",
+    "@vitejs/plugin-react": "^4.7.0",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "husky": "^9.1.7",
+    "prettier": "^3.8.3",
+    "typescript": "^6.0.3",
+    "vite": "^6.4.2",
+    "vite-plugin-chrome-extension": "^0.0.7"
+  }
+}
