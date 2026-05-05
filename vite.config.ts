@@ -50,7 +50,6 @@ export default defineConfig({
         popup: resolve(__dirname, 'src/popup/index.html'),
         sidepanel: resolve(__dirname, 'src/sidepanel/index.html'),
         background: resolve(__dirname, 'src/background/index.ts'),
-        content: resolve(__dirname, 'src/content/index.ts'),
       },
       output: {
         entryFileNames: (chunkInfo) => {

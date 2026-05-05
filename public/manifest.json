@@ -21,7 +21,7 @@
   "side_panel": {
     "default_path": "sidepanel/index.html"
   },
-  "permissions": ["activeTab", "storage", "sidePanel"],
+  "permissions": ["activeTab", "storage", "sidePanel", "scripting", "tabs"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "web_accessible_resources": [
     {

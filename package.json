@@ -6,8 +6,8 @@
   "author": "",
   "license": "MIT",
   "scripts": {
-    "dev": "vite build --watch --mode development",
-    "build": "tsc && vite build",
+    "dev": "concurrently -n main,content -c blue,green \"vite build --watch --mode development\" \"vite build --config vite.content.config.ts --watch --mode development\"",
+    "build": "tsc && vite build && vite build --config vite.content.config.ts",
     "preview": "vite preview",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
@@ -43,6 +43,7 @@
     "@typescript-eslint/eslint-plugin": "^8.59.1",
     "@typescript-eslint/parser": "^8.59.1",
     "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.0.0",
     "eslint": "^9.39.4",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",

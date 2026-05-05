@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import type { Message } from '../shared/messages';
+import { MessageType, type Message } from '../shared/messages';
 
 export const Popup: React.FC = () => {
   const [status, setStatus] = useState<string>('Ready');
 
   useEffect(() => {
-    chrome.runtime.sendMessage({ type: 'POPUP_OPENED' } as Message, (response) => {
+    chrome.runtime.sendMessage({ type: MessageType.POPUP_OPENED } as Message, (response) => {
       if (chrome.runtime.lastError) {
         console.error('Error:', chrome.runtime.lastError);
         return;

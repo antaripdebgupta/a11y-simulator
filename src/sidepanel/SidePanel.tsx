@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import type { Message } from '../shared/messages';
+import { MessageType, type Message } from '../shared/messages';
 
 export const SidePanel: React.FC = () => {
   const [data] = useState<string[]>([]);
 
   useEffect(() => {
-    chrome.runtime.sendMessage({ type: 'SIDEPANEL_OPENED' } as Message, (response) => {
+    chrome.runtime.sendMessage({ type: MessageType.SIDEPANEL_OPENED } as Message, (response) => {
       if (chrome.runtime.lastError) {
         console.error('Error:', chrome.runtime.lastError);
         return;
