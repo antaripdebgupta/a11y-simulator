@@ -15,6 +15,7 @@
     {
       "matches": ["<all_urls>"],
       "js": ["content/index.js"],
+      "css": ["content/styles/tab-order.css"],
       "run_at": "document_idle"
     }
   ],

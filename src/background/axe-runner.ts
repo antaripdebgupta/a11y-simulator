@@ -47,7 +47,7 @@ const logViolationRules = (violations: Result[]): void => {
   console.groupEnd();
 };
 
-// Injects axe-core into the MAIN world of the given tab then runs a WCAG scan.
+// Injects axe-core into the ISOLATED world of the given tab then runs a WCAG scan.
 
 export const runAxeScanForTab = async (tabId: number): Promise<Result[]> => {
   if (!isValidTabId(tabId) || !chrome.scripting?.executeScript) {
@@ -61,11 +61,18 @@ export const runAxeScanForTab = async (tabId: number): Promise<Result[]> => {
   }
 
   try {
-    console.debug(`[Axe Runner] Injecting ${axeCoreFilePath} into MAIN world of tab ${tabId}`);
+    // Verify tab exists and is accessible
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (!tab || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://')) {
+      console.warn(`[Axe Runner] Tab ${tabId} is not accessible or is a protected page`);
+      return [];
+    }
+
+    console.debug(`[Axe Runner] Injecting ${axeCoreFilePath} into ISOLATED world of tab ${tabId}`);
     // Step 1 — inject the axe library as a web-accessible extension asset.
     await chrome.scripting.executeScript({
       target: { tabId },
-      world: 'MAIN',
+      world: 'ISOLATED',
       files: [axeCoreFilePath],
     });
 
@@ -73,25 +80,24 @@ export const runAxeScanForTab = async (tabId: number): Promise<Result[]> => {
     // Step 2 — run the scan inside page context and return the raw violation objects.
     const scanResult = await chrome.scripting.executeScript({
       target: { tabId },
-      world: 'MAIN',
+      world: 'ISOLATED',
       args: [WCAG_TAGS],
       func: async (tags) => {
         try {
-          const win = window as {
-            axe?: {
-              run: (
-                context?: unknown,
-                options?: { runOnly?: { type: 'tag'; values: string[] } }
-              ) => Promise<{ violations?: unknown[] }>;
-            };
-          };
-
-          if (!win.axe?.run) {
+          const maybeAxe = (globalThis as unknown as { axe?: { run?: Function } }).axe;
+          if (typeof maybeAxe?.run !== 'function') {
             console.error('[Axe] axe.run not available after injection');
             return [];
           }
 
-          const results = await win.axe.run(document, {
+          const results = await (
+            maybeAxe as {
+              run: (
+                context?: unknown,
+                options?: { runOnly?: { type: 'tag'; values: string[] } }
+              ) => Promise<{ violations?: unknown[] }>;
+            }
+          ).run(document, {
             runOnly: { type: 'tag', values: [...tags] },
           });
 
@@ -110,7 +116,17 @@ export const runAxeScanForTab = async (tabId: number): Promise<Result[]> => {
     logViolationRules(violations);
     return violations;
   } catch (error) {
-    console.error('[Axe Runner] Injection or scan failed:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+
+    // Don't spam console with common transient errors
+    if (errorMsg.includes('Frame with ID') || errorMsg.includes('was removed')) {
+      console.debug('[Axe Runner] Frame removed during scan (tab navigated or closed)');
+    } else if (errorMsg.includes('No tab with id')) {
+      console.debug('[Axe Runner] Tab no longer exists');
+    } else {
+      console.error('[Axe Runner] Injection or scan failed:', error);
+    }
+
     return [];
   }
 };

@@ -5,6 +5,7 @@ export enum MessageType {
   CONTENT_ACTION = 'CONTENT_ACTION',
   REQUEST_AXE_SCAN = 'REQUEST_AXE_SCAN',
   VIOLATION_COUNT = 'VIOLATION_COUNT',
+  TOGGLE_TAB_ORDER = 'TOGGLE_TAB_ORDER',
 }
 
 export interface Message<T = unknown> {
@@ -18,4 +19,8 @@ export interface ViolationCountPayload {
 
 export interface RequestAxeScanPayload {
   tabId?: number;
+}
+
+export interface ToggleTabOrderPayload {
+  enabled: boolean;
 }

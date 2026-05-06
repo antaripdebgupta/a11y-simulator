@@ -30,8 +30,12 @@ export default [
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
         HTMLElement: 'readonly',
+        HTMLDivElement: 'readonly',
         MutationObserver: 'readonly',
         MutationRecord: 'readonly',
+        MessageEvent: 'readonly',
+        DOMRect: 'readonly',
+        Node: 'readonly',
       },
     },
     plugins: {

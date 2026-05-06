@@ -4,6 +4,7 @@ import {
   type Message,
   type RequestAxeScanPayload,
   type ViolationCountPayload,
+  type ToggleTabOrderPayload,
 } from '../shared/messages';
 
 const BADGE_COLORS = {
@@ -81,12 +82,57 @@ const handleAxeScanRequest = async (
     return { violations: [] };
   }
 
-  await resetBadge(tabId);
+  try {
+    // Verify tab still exists before attempting scan
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (!tab) {
+      console.warn(`[Service Worker] Tab ${tabId} no longer exists`);
+      return { violations: [] };
+    }
 
-  const violations = await runAxeScanForTab(tabId);
-  await updateBadge(tabId, violations.length);
-  console.debug(`[Service Worker] Axe scan complete: ${violations.length} violations found`);
-  return { violations };
+    await resetBadge(tabId);
+
+    const violations = await runAxeScanForTab(tabId);
+    await updateBadge(tabId, violations.length);
+    console.debug(`[Service Worker] Axe scan complete: ${violations.length} violations found`);
+    return { violations };
+  } catch (error) {
+    console.error('[Service Worker] Axe scan request failed:', error);
+    return { violations: [] };
+  }
+};
+
+const handleTabOrderToggle = async (
+  message: Message<ToggleTabOrderPayload>,
+  sender: chrome.runtime.MessageSender
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    let tabId = sender.tab?.id;
+
+    if (!tabId) {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      tabId = activeTab?.id;
+
+      if (!tabId) {
+        console.warn('[Service Worker] No tab ID for tab order toggle');
+        return { success: false, error: 'No active tab found' };
+      }
+    }
+
+    console.debug(
+      `[Service Worker] Forwarding TOGGLE_TAB_ORDER to tab ${tabId}, enabled=${message.payload?.enabled}`
+    );
+
+    const response = await chrome.tabs.sendMessage(tabId, message).catch((err) => {
+      console.error('[Service Worker] Failed to forward tab order message:', err);
+      return { success: false, error: String(err) };
+    });
+
+    return response as { success: boolean; error?: string };
+  } catch (error) {
+    console.error('[Service Worker] Tab order toggle failed:', error);
+    return { success: false, error: String(error) };
+  }
 };
 
 const processMessage = (
@@ -119,6 +165,19 @@ const processMessage = (
       })
       .catch((error) => {
         console.error('[Service Worker] Failed to update badge:', error);
+        sendResponse({ success: false, error: String(error) });
+      });
+    return true;
+  }
+
+  if (message.type === MessageType.TOGGLE_TAB_ORDER) {
+    void handleTabOrderToggle(message as Message<ToggleTabOrderPayload>, sender)
+      .then((response) => {
+        console.debug('[Service Worker] Tab order toggle response:', response);
+        sendResponse(response);
+      })
+      .catch((error) => {
+        console.error('[Service Worker] Tab order toggle error:', error);
         sendResponse({ success: false, error: String(error) });
       });
     return true;

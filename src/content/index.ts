@@ -1,10 +1,35 @@
 import { requestAxeScanForCurrentTab } from './axe-runner';
+import { renderTabOrder, clearTabOrder } from './tab-order';
 import {
   MessageType,
   type Message,
   type ViolationCountPayload,
   type RequestAxeScanPayload,
+  type ToggleTabOrderPayload,
 } from '../shared/messages';
+import { getFromStorage, setInStorage } from '../shared/storage';
+
+type TabOrderBridgeAction = 'enable' | 'disable' | 'status' | 'verify';
+
+interface TabOrderBridgeRequest {
+  __a11ySimulator: true;
+  feature: 'tabOrder';
+  action: TabOrderBridgeAction;
+  requestId?: string;
+}
+
+interface TabOrderBridgeResponse {
+  __a11ySimulator: true;
+  feature: 'tabOrder';
+  requestId?: string;
+  success: boolean;
+  error?: string;
+  active?: boolean;
+  badges?: number;
+  highlights?: number;
+  mismatches?: number;
+  results?: Array<{ name: string; pass: boolean; detail?: string }>;
+}
 
 const RESCAN_DEBOUNCE_MS = 800;
 const OBSERVED_ATTRIBUTES = [
@@ -116,6 +141,21 @@ const handleMessage = (
   _sender: chrome.runtime.MessageSender,
   sendResponse: (response?: unknown) => void
 ): void => {
+  if (message.type === MessageType.TOGGLE_TAB_ORDER) {
+    const payload = message.payload as ToggleTabOrderPayload;
+
+    if (payload.enabled) {
+      renderTabOrder();
+      void setInStorage('tabOrderEnabled', true);
+    } else {
+      clearTabOrder();
+      void setInStorage('tabOrderEnabled', false);
+    }
+
+    sendResponse({ success: true });
+    return;
+  }
+
   if (message.type !== MessageType.CONTENT_ACTION) {
     sendResponse({ success: false, error: 'Unsupported message type' });
     return;
@@ -138,11 +178,149 @@ const setupMessageListener = (): void => {
   });
 };
 
+const getTabOrderDomStats = (): {
+  active: boolean;
+  badges: number;
+  highlights: number;
+  mismatches: number;
+} => {
+  const overlay = document.getElementById('a11y-inspector-tab-overlay');
+  return {
+    active: Boolean(overlay),
+    badges: document.querySelectorAll('.a11y-inspector-tab-badge').length,
+    highlights: document.querySelectorAll('.a11y-inspector-tab-highlight').length,
+    mismatches: document.querySelectorAll('[data-a11y-order-mismatch="true"]').length,
+  };
+};
+
+const setupTabOrderPostMessageBridge = (): void => {
+  // Allows testing from the page's DevTools console on *any normal webpage*
+  // without relying on chrome.runtime or inline script injection (CSP-safe).
+  window.addEventListener('message', (event: MessageEvent) => {
+    if (event.source !== window) {
+      return;
+    }
+
+    const data = event.data as unknown;
+    if (!data || typeof data !== 'object') {
+      return;
+    }
+
+    const maybeRequest = data as Partial<TabOrderBridgeRequest>;
+    if (maybeRequest.__a11ySimulator !== true || maybeRequest.feature !== 'tabOrder') {
+      return;
+    }
+
+    const response: TabOrderBridgeResponse = {
+      __a11ySimulator: true,
+      feature: 'tabOrder',
+      ...(typeof maybeRequest.requestId === 'string' ? { requestId: maybeRequest.requestId } : {}),
+      success: true,
+    };
+
+    try {
+      switch (maybeRequest.action) {
+        case 'enable':
+          renderTabOrder();
+          break;
+        case 'disable':
+          clearTabOrder();
+          break;
+        case 'status':
+          // no-op
+          break;
+        case 'verify': {
+          // Render -> validate key invariants -> clear
+          clearTabOrder();
+          renderTabOrder();
+
+          const afterRender = getTabOrderDomStats();
+          const badges = Array.from(document.querySelectorAll('.a11y-inspector-tab-badge'));
+          const positiveBadges = document.querySelectorAll(
+            '.a11y-inspector-tab-badge--positive-tabindex'
+          );
+
+          const results: TabOrderBridgeResponse['results'] = [];
+
+          results.push({
+            name: 'overlay exists',
+            pass: document.getElementById('a11y-inspector-tab-overlay') !== null,
+          });
+
+          results.push({
+            name: 'badges match highlights',
+            pass: afterRender.badges > 0 && afterRender.badges === afterRender.highlights,
+            detail: `badges=${afterRender.badges}, highlights=${afterRender.highlights}`,
+          });
+
+          const sequential = badges.every((badge, i) => {
+            const text = (badge.textContent ?? '').replace('!', '');
+            return parseInt(text, 10) === i + 1;
+          });
+          results.push({ name: 'badge numbering sequential', pass: sequential });
+
+          // If there are amber badges, they should all have ! suffix
+          const amberSuffixOk = Array.from(positiveBadges).every((b) =>
+            (b.textContent ?? '').endsWith('!')
+          );
+          results.push({
+            name: 'positive tabindex badges have !',
+            pass: positiveBadges.length === 0 ? true : amberSuffixOk,
+            detail: `positiveBadges=${positiveBadges.length}`,
+          });
+
+          // Clear and validate cleanup
+          clearTabOrder();
+          const afterClear = getTabOrderDomStats();
+          results.push({
+            name: 'clear removes overlay',
+            pass: document.getElementById('a11y-inspector-tab-overlay') === null,
+          });
+          results.push({
+            name: 'clear removes highlight classes',
+            pass: afterClear.highlights === 0,
+            detail: `highlights=${afterClear.highlights}`,
+          });
+          results.push({
+            name: 'clear removes mismatch attrs',
+            pass: document.querySelectorAll('[data-a11y-order-mismatch]').length === 0,
+          });
+
+          response.results = results;
+
+          // Restore rendered state after verification for convenience
+          renderTabOrder();
+          break;
+        }
+        default:
+          response.success = false;
+          response.error = 'Unsupported action';
+      }
+
+      Object.assign(response, getTabOrderDomStats());
+    } catch (error) {
+      response.success = false;
+      response.error = error instanceof Error ? error.message : String(error);
+    }
+
+    window.postMessage(response, '*');
+  });
+};
+
 const init = (): void => {
   console.debug('[Content Script] Initializing');
   setupMessageListener();
   setupMutationObserver();
+  setupTabOrderPostMessageBridge();
   void runAndReportScan();
+
+  void (async () => {
+    const tabOrderEnabled = await getFromStorage<boolean>('tabOrderEnabled');
+    if (tabOrderEnabled) {
+      renderTabOrder();
+    }
+  })();
+
   console.debug('[Content Script] Initialization complete');
 };
 
