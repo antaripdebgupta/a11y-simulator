@@ -6,7 +6,7 @@ import reactHooksPlugin from 'eslint-plugin-react-hooks';
 
 export default [
   {
-    ignores: ['dist/**', 'node_modules/**', 'vite.config.ts'],
+    ignores: ['dist/**', 'node_modules/**', 'vite.config.ts', 'tests/**'],
   },
   js.configs.recommended,
   {
@@ -31,11 +31,17 @@ export default [
         clearTimeout: 'readonly',
         HTMLElement: 'readonly',
         HTMLDivElement: 'readonly',
+        HTMLInputElement: 'readonly',
+        HTMLButtonElement: 'readonly',
+        HTMLLabelElement: 'readonly',
         MutationObserver: 'readonly',
         MutationRecord: 'readonly',
         MessageEvent: 'readonly',
         DOMRect: 'readonly',
         Node: 'readonly',
+        Event: 'readonly',
+        FocusEvent: 'readonly',
+        SpeechSynthesisUtterance: 'readonly',
       },
     },
     plugins: {

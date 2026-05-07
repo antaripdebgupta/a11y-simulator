@@ -6,6 +6,7 @@ export enum MessageType {
   REQUEST_AXE_SCAN = 'REQUEST_AXE_SCAN',
   VIOLATION_COUNT = 'VIOLATION_COUNT',
   TOGGLE_TAB_ORDER = 'TOGGLE_TAB_ORDER',
+  TOGGLE_SCREEN_READER = 'TOGGLE_SCREEN_READER',
 }
 
 export interface Message<T = unknown> {
@@ -22,5 +23,9 @@ export interface RequestAxeScanPayload {
 }
 
 export interface ToggleTabOrderPayload {
+  enabled: boolean;
+}
+
+export interface ToggleScreenReaderPayload {
   enabled: boolean;
 }

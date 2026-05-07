@@ -1,11 +1,13 @@
 import { requestAxeScanForCurrentTab } from './axe-runner';
 import { renderTabOrder, clearTabOrder } from './tab-order';
+import { initScreenReader, destroyScreenReader, isScreenReaderActive } from './screen-reader';
 import {
   MessageType,
   type Message,
   type ViolationCountPayload,
   type RequestAxeScanPayload,
   type ToggleTabOrderPayload,
+  type ToggleScreenReaderPayload,
 } from '../shared/messages';
 import { getFromStorage, setInStorage } from '../shared/storage';
 
@@ -29,6 +31,25 @@ interface TabOrderBridgeResponse {
   highlights?: number;
   mismatches?: number;
   results?: Array<{ name: string; pass: boolean; detail?: string }>;
+}
+
+type ScreenReaderBridgeAction = 'enable' | 'disable' | 'status' | 'test';
+
+interface ScreenReaderBridgeRequest {
+  __a11ySimulator: true;
+  feature: 'screenReader';
+  action: ScreenReaderBridgeAction;
+  requestId?: string;
+}
+
+interface ScreenReaderBridgeResponse {
+  __a11ySimulator: true;
+  feature: 'screenReader';
+  requestId?: string;
+  success: boolean;
+  error?: string;
+  active?: boolean;
+  message?: string;
 }
 
 const RESCAN_DEBOUNCE_MS = 800;
@@ -150,6 +171,21 @@ const handleMessage = (
     } else {
       clearTabOrder();
       void setInStorage('tabOrderEnabled', false);
+    }
+
+    sendResponse({ success: true });
+    return;
+  }
+
+  if (message.type === MessageType.TOGGLE_SCREEN_READER) {
+    const payload = message.payload as ToggleScreenReaderPayload;
+
+    if (payload.enabled) {
+      initScreenReader();
+      void setInStorage('screenReaderEnabled', true);
+    } else {
+      destroyScreenReader();
+      void setInStorage('screenReaderEnabled', false);
     }
 
     sendResponse({ success: true });
@@ -307,17 +343,121 @@ const setupTabOrderPostMessageBridge = (): void => {
   });
 };
 
+const setupScreenReaderPostMessageBridge = (): void => {
+  // Allows testing from the page's DevTools console on *any normal webpage*
+  // without relying on chrome.runtime or inline script injection (CSP-safe).
+  window.addEventListener('message', (event: MessageEvent) => {
+    if (event.source !== window) {
+      return;
+    }
+
+    const data = event.data as unknown;
+    if (!data || typeof data !== 'object') {
+      return;
+    }
+
+    const maybeRequest = data as Partial<ScreenReaderBridgeRequest>;
+    if (maybeRequest.__a11ySimulator !== true || maybeRequest.feature !== 'screenReader') {
+      return;
+    }
+
+    const response: ScreenReaderBridgeResponse = {
+      __a11ySimulator: true,
+      feature: 'screenReader',
+      ...(typeof maybeRequest.requestId === 'string' ? { requestId: maybeRequest.requestId } : {}),
+      success: true,
+      active: false,
+    };
+
+    try {
+      switch (maybeRequest.action) {
+        case 'enable':
+          initScreenReader();
+          response.active = true;
+          response.message = 'Screen reader enabled. Press Tab to navigate and hear announcements.';
+          break;
+        case 'disable':
+          destroyScreenReader();
+          response.active = false;
+          response.message = 'Screen reader disabled.';
+          break;
+        case 'status':
+          // Check if screen reader is active by checking for the listener
+          response.active = isScreenReaderActive();
+          response.message = response.active
+            ? 'Screen reader is enabled'
+            : 'Screen reader is disabled';
+          break;
+        case 'test': {
+          // Create test elements and focus them to verify announcements
+          const testContainer = document.createElement('div');
+          testContainer.id = 'a11y-sr-test';
+          testContainer.style.cssText =
+            'position:fixed;top:10px;right:10px;z-index:999999;opacity:0;pointer-events:none';
+
+          // Test 1: Button with aria-label
+          const btn = document.createElement('button');
+          btn.setAttribute('aria-label', 'Test button');
+          testContainer.appendChild(btn);
+
+          // Test 2: Required checkbox
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.setAttribute('aria-label', 'Accept terms');
+          cb.required = true;
+          testContainer.appendChild(cb);
+
+          // Test 3: Heading
+          const h2 = document.createElement('h2');
+          h2.textContent = 'Test heading';
+          h2.tabIndex = -1;
+          testContainer.appendChild(h2);
+
+          document.body.appendChild(testContainer);
+
+          // Focus elements in sequence
+          setTimeout(() => btn.focus(), 100);
+          setTimeout(() => cb.focus(), 1500);
+          setTimeout(() => h2.focus(), 3000);
+          setTimeout(() => {
+            testContainer.remove();
+          }, 5000);
+
+          response.active = true;
+          response.message =
+            'Test started. You should hear 3 announcements over 5 seconds. Check DevTools console for [Screen Reader] logs.';
+          break;
+        }
+        default:
+          response.success = false;
+          response.error = 'Unsupported action';
+      }
+    } catch (error) {
+      response.success = false;
+      response.error = error instanceof Error ? error.message : String(error);
+    }
+
+    window.postMessage(response, '*');
+  });
+};
+
 const init = (): void => {
   console.debug('[Content Script] Initializing');
   setupMessageListener();
   setupMutationObserver();
   setupTabOrderPostMessageBridge();
+  setupScreenReaderPostMessageBridge();
   void runAndReportScan();
 
   void (async () => {
     const tabOrderEnabled = await getFromStorage<boolean>('tabOrderEnabled');
     if (tabOrderEnabled) {
       renderTabOrder();
+    }
+
+    const screenReaderEnabled = await getFromStorage<boolean>('screenReaderEnabled');
+    if (screenReaderEnabled) {
+      initScreenReader();
     }
   })();
 
