@@ -1,6 +1,7 @@
 import { requestAxeScanForCurrentTab } from './axe-runner';
 import { renderTabOrder, clearTabOrder } from './tab-order';
 import { initScreenReader, destroyScreenReader, isScreenReaderActive } from './screen-reader';
+import { applyColourBlindFilter, type ColourBlindMode } from './colour-blind';
 import {
   MessageType,
   type Message,
@@ -8,8 +9,10 @@ import {
   type RequestAxeScanPayload,
   type ToggleTabOrderPayload,
   type ToggleScreenReaderPayload,
+  type SetColourBlindModePayload,
 } from '../shared/messages';
 import { getFromStorage, setInStorage } from '../shared/storage';
+import './styles/colour-blind.css';
 
 type TabOrderBridgeAction = 'enable' | 'disable' | 'status' | 'verify';
 
@@ -49,6 +52,26 @@ interface ScreenReaderBridgeResponse {
   success: boolean;
   error?: string;
   active?: boolean;
+  message?: string;
+}
+
+type ColourBlindBridgeAction = 'set' | 'get' | 'clear';
+
+interface ColourBlindBridgeRequest {
+  __a11ySimulator: true;
+  feature: 'colourBlind';
+  action: ColourBlindBridgeAction;
+  mode?: ColourBlindMode;
+  requestId?: string;
+}
+
+interface ColourBlindBridgeResponse {
+  __a11ySimulator: true;
+  feature: 'colourBlind';
+  requestId?: string;
+  success: boolean;
+  error?: string;
+  mode?: ColourBlindMode;
   message?: string;
 }
 
@@ -187,6 +210,16 @@ const handleMessage = (
       destroyScreenReader();
       void setInStorage('screenReaderEnabled', false);
     }
+
+    sendResponse({ success: true });
+    return;
+  }
+
+  if (message.type === MessageType.SET_COLOUR_BLIND_MODE) {
+    const payload = message.payload as SetColourBlindModePayload;
+
+    applyColourBlindFilter(payload.mode);
+    void setInStorage('colourBlindMode', payload.mode);
 
     sendResponse({ success: true });
     return;
@@ -441,12 +474,101 @@ const setupScreenReaderPostMessageBridge = (): void => {
   });
 };
 
+const setupColourBlindPostMessageBridge = (): void => {
+  window.addEventListener('message', (event: MessageEvent) => {
+    if (event.source !== window) {
+      return;
+    }
+
+    const data = event.data as unknown;
+    if (!data || typeof data !== 'object') {
+      return;
+    }
+
+    const maybeRequest = data as Partial<ColourBlindBridgeRequest>;
+    if (maybeRequest.__a11ySimulator !== true || maybeRequest.feature !== 'colourBlind') {
+      return;
+    }
+
+    const response: ColourBlindBridgeResponse = {
+      __a11ySimulator: true,
+      feature: 'colourBlind',
+      ...(typeof maybeRequest.requestId === 'string' ? { requestId: maybeRequest.requestId } : {}),
+      success: true,
+    };
+
+    try {
+      switch (maybeRequest.action) {
+        case 'set': {
+          const mode = maybeRequest.mode;
+          if (
+            !mode ||
+            !['none', 'deuteranopia', 'protanopia', 'tritanopia', 'achromatopsia'].includes(mode)
+          ) {
+            response.success = false;
+            response.error =
+              'Invalid mode. Use: none, deuteranopia, protanopia, tritanopia, or achromatopsia';
+            break;
+          }
+          applyColourBlindFilter(mode);
+          void setInStorage('colourBlindMode', mode);
+          response.mode = mode;
+          response.message =
+            mode === 'none' ? 'Colour blind filter removed' : `Applied ${mode} filter`;
+          break;
+        }
+        case 'get': {
+          // Check for active filter
+          const svg = document.getElementById('a11y-inspector-svg-filters');
+          const indicator = document.getElementById('a11y-inspector-colour-blind-indicator');
+          const style = document.getElementById('a11y-inspector-colour-blind-style');
+
+          if (!svg || !style || !indicator) {
+            response.mode = 'none';
+            response.message = 'No colour blind filter active';
+          } else {
+            const styleContent = style.textContent || '';
+            if (styleContent.includes('deuteranopia')) {
+              response.mode = 'deuteranopia';
+            } else if (styleContent.includes('protanopia')) {
+              response.mode = 'protanopia';
+            } else if (styleContent.includes('tritanopia')) {
+              response.mode = 'tritanopia';
+            } else if (styleContent.includes('achromatopsia')) {
+              response.mode = 'achromatopsia';
+            } else {
+              response.mode = 'none';
+            }
+            response.message = `Current mode: ${response.mode}`;
+          }
+          break;
+        }
+        case 'clear':
+          applyColourBlindFilter('none');
+          void setInStorage('colourBlindMode', 'none');
+          response.mode = 'none';
+          response.message = 'Colour blind filter cleared';
+          break;
+        default:
+          response.success = false;
+          response.error = 'Unsupported action. Use: set, get, or clear';
+      }
+    } catch (error) {
+      response.success = false;
+      response.error = error instanceof Error ? error.message : String(error);
+    }
+
+    window.postMessage(response, '*');
+  });
+};
+
 const init = (): void => {
   console.debug('[Content Script] Initializing');
   setupMessageListener();
   setupMutationObserver();
   setupTabOrderPostMessageBridge();
   setupScreenReaderPostMessageBridge();
+  setupColourBlindPostMessageBridge();
   void runAndReportScan();
 
   void (async () => {
@@ -458,6 +580,11 @@ const init = (): void => {
     const screenReaderEnabled = await getFromStorage<boolean>('screenReaderEnabled');
     if (screenReaderEnabled) {
       initScreenReader();
+    }
+
+    const colourBlindMode = await getFromStorage<ColourBlindMode>('colourBlindMode');
+    if (colourBlindMode && colourBlindMode !== 'none') {
+      applyColourBlindFilter(colourBlindMode);
     }
   })();
 

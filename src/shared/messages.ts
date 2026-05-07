@@ -7,6 +7,7 @@ export enum MessageType {
   VIOLATION_COUNT = 'VIOLATION_COUNT',
   TOGGLE_TAB_ORDER = 'TOGGLE_TAB_ORDER',
   TOGGLE_SCREEN_READER = 'TOGGLE_SCREEN_READER',
+  SET_COLOUR_BLIND_MODE = 'SET_COLOUR_BLIND_MODE',
 }
 
 export interface Message<T = unknown> {
@@ -29,3 +30,14 @@ export interface ToggleTabOrderPayload {
 export interface ToggleScreenReaderPayload {
   enabled: boolean;
 }
+
+export interface SetColourBlindModePayload {
+  mode: ColourBlindMode;
+}
+
+export type ColourBlindMode =
+  | 'none'
+  | 'deuteranopia'
+  | 'protanopia'
+  | 'tritanopia'
+  | 'achromatopsia';
