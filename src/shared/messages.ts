@@ -8,6 +8,7 @@ export enum MessageType {
   TOGGLE_TAB_ORDER = 'TOGGLE_TAB_ORDER',
   TOGGLE_SCREEN_READER = 'TOGGLE_SCREEN_READER',
   SET_COLOUR_BLIND_MODE = 'SET_COLOUR_BLIND_MODE',
+  TOGGLE_KEYBOARD_ONLY = 'TOGGLE_KEYBOARD_ONLY',
 }
 
 export interface Message<T = unknown> {
@@ -28,6 +29,10 @@ export interface ToggleTabOrderPayload {
 }
 
 export interface ToggleScreenReaderPayload {
+  enabled: boolean;
+}
+
+export interface ToggleKeyboardOnlyPayload {
   enabled: boolean;
 }
 

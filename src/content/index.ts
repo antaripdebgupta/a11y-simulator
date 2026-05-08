@@ -2,6 +2,7 @@ import { requestAxeScanForCurrentTab } from './axe-runner';
 import { renderTabOrder, clearTabOrder } from './tab-order';
 import { initScreenReader, destroyScreenReader, isScreenReaderActive } from './screen-reader';
 import { applyColourBlindFilter, type ColourBlindMode } from './colour-blind';
+import { enableKeyboardOnly, disableKeyboardOnly, isKeyboardOnlyActive } from './keyboard-mode';
 import {
   MessageType,
   type Message,
@@ -10,9 +11,11 @@ import {
   type ToggleTabOrderPayload,
   type ToggleScreenReaderPayload,
   type SetColourBlindModePayload,
+  type ToggleKeyboardOnlyPayload,
 } from '../shared/messages';
 import { getFromStorage, setInStorage } from '../shared/storage';
 import './styles/colour-blind.css';
+import './styles/keyboard-mode.css';
 
 type TabOrderBridgeAction = 'enable' | 'disable' | 'status' | 'verify';
 
@@ -72,6 +75,25 @@ interface ColourBlindBridgeResponse {
   success: boolean;
   error?: string;
   mode?: ColourBlindMode;
+  message?: string;
+}
+
+type KeyboardModeBridgeAction = 'enable' | 'disable' | 'status';
+
+interface KeyboardModeBridgeRequest {
+  __a11ySimulator: true;
+  feature: 'keyboardMode';
+  action: KeyboardModeBridgeAction;
+  requestId?: string;
+}
+
+interface KeyboardModeBridgeResponse {
+  __a11ySimulator: true;
+  feature: 'keyboardMode';
+  requestId?: string;
+  success: boolean;
+  error?: string;
+  active?: boolean;
   message?: string;
 }
 
@@ -220,6 +242,21 @@ const handleMessage = (
 
     applyColourBlindFilter(payload.mode);
     void setInStorage('colourBlindMode', payload.mode);
+
+    sendResponse({ success: true });
+    return;
+  }
+
+  if (message.type === MessageType.TOGGLE_KEYBOARD_ONLY) {
+    const payload = message.payload as ToggleKeyboardOnlyPayload;
+
+    if (payload.enabled) {
+      enableKeyboardOnly();
+      void setInStorage('keyboardOnlyEnabled', true);
+    } else {
+      disableKeyboardOnly();
+      void setInStorage('keyboardOnlyEnabled', false);
+    }
 
     sendResponse({ success: true });
     return;
@@ -562,6 +599,64 @@ const setupColourBlindPostMessageBridge = (): void => {
   });
 };
 
+const setupKeyboardModePostMessageBridge = (): void => {
+  window.addEventListener('message', (event: MessageEvent) => {
+    if (event.source !== window) {
+      return;
+    }
+
+    const data = event.data as unknown;
+    if (!data || typeof data !== 'object') {
+      return;
+    }
+
+    const maybeRequest = data as Partial<KeyboardModeBridgeRequest>;
+    if (maybeRequest.__a11ySimulator !== true || maybeRequest.feature !== 'keyboardMode') {
+      return;
+    }
+
+    const response: KeyboardModeBridgeResponse = {
+      __a11ySimulator: true,
+      feature: 'keyboardMode',
+      ...(typeof maybeRequest.requestId === 'string' ? { requestId: maybeRequest.requestId } : {}),
+      success: true,
+      active: isKeyboardOnlyActive(),
+    };
+
+    try {
+      switch (maybeRequest.action) {
+        case 'enable':
+          enableKeyboardOnly();
+          void setInStorage('keyboardOnlyEnabled', true);
+          response.active = true;
+          response.message =
+            'Keyboard-only mode enabled. Mouse events are now blocked. Use Tab/Shift+Tab to navigate.';
+          break;
+        case 'disable':
+          disableKeyboardOnly();
+          void setInStorage('keyboardOnlyEnabled', false);
+          response.active = false;
+          response.message = 'Keyboard-only mode disabled. Mouse events restored.';
+          break;
+        case 'status':
+          response.active = isKeyboardOnlyActive();
+          response.message = response.active
+            ? 'Keyboard-only mode is active'
+            : 'Keyboard-only mode is inactive';
+          break;
+        default:
+          response.success = false;
+          response.error = 'Unsupported action. Use: enable, disable, or status';
+      }
+    } catch (error) {
+      response.success = false;
+      response.error = error instanceof Error ? error.message : String(error);
+    }
+
+    window.postMessage(response, '*');
+  });
+};
+
 const init = (): void => {
   console.debug('[Content Script] Initializing');
   setupMessageListener();
@@ -569,6 +664,7 @@ const init = (): void => {
   setupTabOrderPostMessageBridge();
   setupScreenReaderPostMessageBridge();
   setupColourBlindPostMessageBridge();
+  setupKeyboardModePostMessageBridge();
   void runAndReportScan();
 
   void (async () => {
@@ -585,6 +681,11 @@ const init = (): void => {
     const colourBlindMode = await getFromStorage<ColourBlindMode>('colourBlindMode');
     if (colourBlindMode && colourBlindMode !== 'none') {
       applyColourBlindFilter(colourBlindMode);
+    }
+
+    const keyboardOnlyEnabled = await getFromStorage<boolean>('keyboardOnlyEnabled');
+    if (keyboardOnlyEnabled) {
+      enableKeyboardOnly();
     }
   })();
 

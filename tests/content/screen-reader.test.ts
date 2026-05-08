@@ -10,6 +10,7 @@ interface MockSpeechSynthesisUtterance {
 interface MockSpeechSynthesis {
   speaking: boolean;
   cancelled: boolean;
+  cancelCallCount: number;
   lastUtterance: MockSpeechSynthesisUtterance | null;
   speak: (utterance: MockSpeechSynthesisUtterance) => void;
   cancel: () => void;
@@ -20,6 +21,7 @@ const setupSpeechSynthesisMock = (): MockSpeechSynthesis => {
   const mock: MockSpeechSynthesis = {
     speaking: false,
     cancelled: false,
+    cancelCallCount: 0,
     lastUtterance: null,
     speak(utterance: MockSpeechSynthesisUtterance) {
       this.speaking = true;
@@ -29,6 +31,7 @@ const setupSpeechSynthesisMock = (): MockSpeechSynthesis => {
     cancel() {
       this.speaking = false;
       this.cancelled = true;
+      this.cancelCallCount++;
       this.lastUtterance = null;
     },
   };
@@ -368,14 +371,14 @@ describe('Screen Reader Simulator', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(mockSpeech.lastUtterance?.text).toContain('First');
-    expect(mockSpeech.cancelled).toBe(true); // cancel called before speak
+    expect(mockSpeech.cancelCallCount).toBe(1); // cancel called before speak
 
     // Focus second button
     button2.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(mockSpeech.lastUtterance?.text).toContain('Second');
-    expect(mockSpeech.cancelled).toBe(true); // cancel called again
+    expect(mockSpeech.cancelCallCount).toBe(2); // cancel called again
 
     // Clean up
     destroyScreenReader();
