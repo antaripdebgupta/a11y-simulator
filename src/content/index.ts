@@ -3,11 +3,14 @@ import { renderTabOrder, clearTabOrder } from './tab-order';
 import { initScreenReader, destroyScreenReader, isScreenReaderActive } from './screen-reader';
 import { applyColourBlindFilter, type ColourBlindMode } from './colour-blind';
 import { enableKeyboardOnly, disableKeyboardOnly, isKeyboardOnlyActive } from './keyboard-mode';
+import { initHighlighter } from './highlighter';
+import { buildAriaTree } from './aria-tree';
 import {
   MessageType,
   type Message,
   type ViolationCountPayload,
   type RequestAxeScanPayload,
+  type RequestAriaTreePayload,
   type ToggleTabOrderPayload,
   type ToggleScreenReaderPayload,
   type SetColourBlindModePayload,
@@ -259,6 +262,27 @@ const handleMessage = (
     }
 
     sendResponse({ success: true });
+    return;
+  }
+
+  if (message.type === MessageType.REQUEST_AXE_SCAN) {
+    void requestAxeScanForCurrentTab().then((violations) => {
+      sendResponse({ violations });
+    });
+    return;
+  }
+
+  if (message.type === MessageType.REQUEST_ARIA_TREE) {
+    const ariaPayload = (message.payload ?? {}) as RequestAriaTreePayload;
+    const violationSelectors = Array.isArray(ariaPayload.violationSelectors)
+      ? ariaPayload.violationSelectors
+      : [];
+    const tree = buildAriaTree(violationSelectors);
+    sendResponse({ tree });
+    return;
+  }
+
+  if (message.type === MessageType.HIGHLIGHT_ELEMENT) {
     return;
   }
 
@@ -665,6 +689,7 @@ const init = (): void => {
   setupScreenReaderPostMessageBridge();
   setupColourBlindPostMessageBridge();
   setupKeyboardModePostMessageBridge();
+  initHighlighter();
   void runAndReportScan();
 
   void (async () => {

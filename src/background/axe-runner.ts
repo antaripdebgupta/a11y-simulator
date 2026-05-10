@@ -94,11 +94,15 @@ export const runAxeScanForTab = async (tabId: number): Promise<Result[]> => {
             maybeAxe as {
               run: (
                 context?: unknown,
-                options?: { runOnly?: { type: 'tag'; values: string[] } }
+                options?: {
+                  runOnly?: { type: 'tag'; values: string[] };
+                  preload?: boolean;
+                }
               ) => Promise<{ violations?: unknown[] }>;
             }
           ).run(document, {
             runOnly: { type: 'tag', values: [...tags] },
+            preload: false,
           });
 
           const count = Array.isArray(results.violations) ? results.violations.length : 0;
