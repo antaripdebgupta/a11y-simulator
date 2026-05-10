@@ -59,10 +59,13 @@ const handleViolationMessage = async (
   sender: chrome.runtime.MessageSender
 ): Promise<void> => {
   const count = normalizeCount(message.payload?.count);
-  console.debug(
-    `[Service Worker] Received VIOLATION_COUNT from tab ${sender.tab?.id}: ${count} violations`
-  );
-  await updateBadge(sender.tab?.id, count);
+  const tabId = sender.tab?.id;
+  console.debug(`[Service Worker] Received VIOLATION_COUNT from tab ${tabId}: ${count} violations`);
+  await updateBadge(tabId, count);
+
+  if (typeof tabId === 'number' && tabId > 0) {
+    await chrome.storage.local.set({ [`violationCount_${tabId}`]: count });
+  }
 };
 
 const handleAxeScanRequest = async (
@@ -199,11 +202,16 @@ const setupListeners = (): void => {
 
   chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (changeInfo.status === 'loading') {
-      console.debug(`[Service Worker] Tab ${tabId} loading, resetting badge`);
+      console.debug(`[Service Worker] Tab ${tabId} loading, resetting badge and count cache`);
       void resetBadge(tabId).catch((error) => {
         console.error('[Service Worker] Failed to reset badge:', error);
       });
+      void chrome.storage.local.remove(`violationCount_${tabId}`);
     }
+  });
+
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    void chrome.storage.local.remove(`violationCount_${tabId}`);
   });
 };
 

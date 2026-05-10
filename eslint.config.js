@@ -50,6 +50,7 @@ export default [
         Event: 'readonly',
         FocusEvent: 'readonly',
         SpeechSynthesisUtterance: 'readonly',
+        HTMLSelectElement: 'readonly',
       },
     },
     plugins: {

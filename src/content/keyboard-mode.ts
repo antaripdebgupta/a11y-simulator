@@ -81,7 +81,7 @@ const checkFocusTrap = (): void => {
   const hasCloseButton = dialog.querySelector(closeSelector) !== null;
   if (!hasCloseButton) {
     console.warn(
-      '[A11y Inspector] Focus trap detected: dialog has no keyboard-accessible close button — WCAG 2.1.2 failure'
+      '[A11y Simulator] Focus trap detected: dialog has no keyboard-accessible close button — WCAG 2.1.2 failure'
     );
   }
 };
