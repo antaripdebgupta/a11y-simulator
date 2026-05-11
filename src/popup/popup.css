@@ -49,7 +49,8 @@ body {
     'Segoe UI',
     sans-serif;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
   background: var(--color-bg);
   color: var(--color-text-primary);
 }
@@ -466,4 +467,30 @@ body {
 .onboarding-banner__dismiss:focus-visible {
   outline: 2px solid #3b82f6;
   outline-offset: 1px;
+}
+
+@media (-webkit-min-device-pixel-ratio: 1.25) {
+  .popup-header {
+    padding: 0 12px;
+  }
+
+  .feature-row {
+    padding: 10px 12px;
+  }
+
+  .colour-blind-section {
+    padding: 9px 12px;
+  }
+
+  .reload-warning {
+    padding: 5px 12px;
+  }
+
+  .open-report-btn {
+    padding: 0 12px;
+  }
+
+  .onboarding-banner {
+    padding: 8px 34px 8px 12px;
+  }
 }

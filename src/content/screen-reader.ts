@@ -8,7 +8,14 @@ interface ComputedAccessibility {
 type RoleMap = Record<string, string>;
 type InputTypeRoleMap = Record<string, string>;
 
-const SPEECH_RATE = 1.4; // Screen readers are fast by default
+export const getSpeechRate = (): number => {
+  const ua = navigator.userAgent;
+  // Linux TTS engines (espeak, speech-dispatcher) run inherently faster
+  // than Windows SAPI or macOS AVSpeechSynthesizer at the same rate value.
+  const isLinux = /Linux/.test(ua) && !/Android/.test(ua);
+  return isLinux ? 1.0 : 1.4;
+};
+
 const MAX_TEXT_CONTENT_LENGTH = 100;
 const UNLABELLED_FALLBACK = 'unlabelled element';
 
@@ -315,9 +322,9 @@ const speak = (text: string): void => {
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = SPEECH_RATE;
-    utterance.volume = 1.0;
-    utterance.pitch = 1.0;
+    utterance.rate = getSpeechRate();
+    utterance.volume = 1;
+    utterance.pitch = 1;
 
     console.debug('[Screen Reader] Speaking:', text);
     window.speechSynthesis.speak(utterance);

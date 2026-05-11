@@ -52,6 +52,7 @@ export default [
         SpeechSynthesisUtterance: 'readonly',
         HTMLSelectElement: 'readonly',
         CSS: 'readonly',
+        navigator: 'readonly',
       },
     },
     plugins: {
