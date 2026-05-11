@@ -16,7 +16,9 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\"",
     "type-check": "tsc --noEmit",
     "prepare": "husky install",
-    "test": "vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui"
   },
   "keywords": [

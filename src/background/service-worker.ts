@@ -30,9 +30,23 @@ const toBadgeText = (count: number): string => {
   return String(count);
 };
 
+export const getBadgeState = (count: number): { text: string; color: string } => {
+  const normalizedCount = normalizeCount(count);
+  const text = normalizedCount === 0 ? '' : toBadgeText(normalizedCount);
+
+  let color: string = BADGE_COLORS.safe;
+  if (normalizedCount >= 5) {
+    color = BADGE_COLORS.danger;
+  } else if (normalizedCount > 0) {
+    color = BADGE_COLORS.warning;
+  }
+
+  return { text, color };
+};
+
 const updateBadge = async (tabId: number | undefined, count: number): Promise<void> => {
   const normalizedCount = normalizeCount(count);
-  const text = toBadgeText(normalizedCount);
+  const text = normalizedCount === 0 ? '' : toBadgeText(normalizedCount);
 
   let color: string = BADGE_COLORS.safe;
   if (normalizedCount >= 5) {
