@@ -1,15 +1,12 @@
 /**
- * SidePanel.tsx
- *
- * Main side-panel UI.  Two tabs:
- *   1. Violations Report — grouped axe-core results with filtering
- *   2. ARIA Tree         — collapsible accessibility tree of the page
- *
- * Communication pattern:
- *   - REQUEST_AXE_SCAN  → sent to the content script, which relays to background
- *   - REQUEST_ARIA_TREE → sent to the content script (DOM access required)
- *   - VIOLATION_COUNT   → received live from content script via runtime.onMessage
- *   - HIGHLIGHT_ELEMENT → sent from child components (ViolationCard / AriaTreeNodeItem)
+   1. Violations Report — grouped axe-core results with filtering
+   2. ARIA Tree         — collapsible accessibility tree of the page
+
+ Communication pattern:
+   - REQUEST_AXE_SCAN  → sent to the content script, which relays to background
+   - REQUEST_ARIA_TREE → sent to the content script (DOM access required)
+   - VIOLATION_COUNT   → received live from content script via runtime.onMessage
+   - HIGHLIGHT_ELEMENT → sent from child components (ViolationCard / AriaTreeNodeItem)
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -25,25 +22,14 @@ import { sendToActiveTab } from '../shared/messaging';
 import { ViolationCard } from './components/ViolationCard';
 import { AriaTreeNodeItem } from './components/AriaTreeNode';
 import { FilterBar } from './components/FilterBar';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import { getWcagVersion } from '../shared/wcag-criteria';
 
 type ActiveTab = 'violations' | 'aria-tree';
 type ImpactFilter = 'All' | 'Critical' | 'Serious' | 'Moderate' | 'Minor';
 
-// ---------------------------------------------------------------------------
-// Helper utilities
-// ---------------------------------------------------------------------------
-
 const WCAG_TAG_RE = /^wcag\d{3,4}$/;
 const IMPACT_ORDER: string[] = ['critical', 'serious', 'moderate', 'minor'];
-
-/** Prefer the first tag that matches wcag\d{3,4}, else 'other'. */
 const extractWcagTag = (tags: string[]): string => tags.find((t) => WCAG_TAG_RE.test(t)) ?? 'other';
-
-/** Convert "wcag111" → "WCAG 1.1.1", "wcag143" → "WCAG 1.4.3", etc. */
 const formatWcagCriterion = (tag: string): string => {
   if (tag === 'other') return 'Other';
   const d = tag.replace('wcag', '');
@@ -58,7 +44,6 @@ const sortByImpact = (a: Result, b: Result): number =>
 const truncateUrl = (url: string, maxLen = 40): string =>
   url.length <= maxLen ? url : `${url.slice(0, maxLen - 1)}…`;
 
-/** Colour the violation-count badge by severity. */
 const badgeColor = (count: number): string => {
   if (count === 0) return '#166534';
   if (count < 5) return '#b45309';
@@ -73,24 +58,72 @@ const extractViolationSelectors = (violations: Result[]): string[] =>
     )
   );
 
-// ---------------------------------------------------------------------------
-// Static SVG assets
-// ---------------------------------------------------------------------------
+const WCAG_CRITERION_RE = /^wcag(\d)(\d)(\d+)$/;
 
-const LogoIcon: React.FC = () => (
-  <svg width="24" height="24" viewBox="0 0 28 28" fill="none" aria-hidden="true" focusable="false">
-    <rect width="28" height="28" rx="6" fill="#1d4ed8" />
-    <circle cx="14" cy="9" r="2.5" fill="white" />
-    <path
-      d="M8 15.5c0-3.3 2.7-6 6-6s6 2.7 6 6"
-      stroke="white"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-    />
-    <path d="M14 15.5v-3" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
-    <path d="M11.5 19.5h5" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
-  </svg>
-);
+/** "wcag111" → "1.1.1",  "wcag1413" → "1.4.13" */
+const tagToCriterionCode = (tag: string): string | null => {
+  const m = WCAG_CRITERION_RE.exec(tag);
+  return m ? `${m[1]}.${m[2]}.${m[3]}` : null;
+};
+
+const VERSION_BADGE: Record<'2.0' | '2.1' | '2.2', { bg: string; color: string; tooltip: string }> =
+  {
+    '2.0': {
+      bg: '#e5e7eb',
+      color: '#374151',
+      tooltip: 'Web Content Accessibility Guidelines 2.0 (2008)',
+    },
+    '2.1': {
+      bg: '#dbeafe',
+      color: '#1e40af',
+      tooltip: 'WCAG 2.1 added mobile and cognitive criteria (2018)',
+    },
+    '2.2': {
+      bg: '#ede9fe',
+      color: '#6d28d9',
+      tooltip: 'WCAG 2.2 added focus and target size criteria (2023)',
+    },
+  };
+
+interface WcagVersionBadgeProps {
+  wcagTag: string;
+}
+
+const WcagVersionBadge: React.FC<WcagVersionBadgeProps> = ({ wcagTag }) => {
+  const code = tagToCriterionCode(wcagTag);
+  if (!code) return null;
+  const version = getWcagVersion(code);
+  if (!version) return null;
+  const s = VERSION_BADGE[version];
+  return (
+    <span
+      className="wcag-version-badge"
+      style={{ backgroundColor: s.bg, color: s.color }}
+      title={s.tooltip}
+      aria-label={`WCAG ${version}`}
+    >
+      WCAG {version}
+    </span>
+  );
+};
+
+// ARIA tree pruning
+const isGenericNoise = (node: AriaTreeNode): boolean =>
+  node.role === 'generic' &&
+  !node.name.trim() &&
+  !node.hasIssue &&
+  (node.tagName === 'DIV' || node.tagName === 'SPAN');
+
+const pruneTree = (nodes: AriaTreeNode[]): AriaTreeNode[] =>
+  nodes.reduce<AriaTreeNode[]>((acc, node) => {
+    const prunedChildren = pruneTree(node.children);
+    // Remove structural noise nodes entirely
+    if (isGenericNoise(node)) return acc;
+    // Non-noise parent whose children were all pruned → also hide
+    if (node.children.length > 0 && prunedChildren.length === 0) return acc;
+    acc.push({ ...node, children: prunedChildren });
+    return acc;
+  }, []);
 
 const EmptyStateIcon: React.FC = () => (
   <svg
@@ -113,10 +146,6 @@ const EmptyStateIcon: React.FC = () => (
   </svg>
 );
 
-// ---------------------------------------------------------------------------
-// SidePanel component
-// ---------------------------------------------------------------------------
-
 export const SidePanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('violations');
   const [violations, setViolations] = useState<Result[]>([]);
@@ -130,10 +159,8 @@ export const SidePanel: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   /** Live violation count pushed by the content script mutation observer. */
   const [liveCount, setLiveCount] = useState<number | null>(null);
-
-  // -------------------------------------------------------------------------
-  // Page URL
-  // -------------------------------------------------------------------------
+  /** When false, generic noise nodes are pruned from the ARIA tree. */
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     chrome.tabs
@@ -142,12 +169,22 @@ export const SidePanel: React.FC = () => {
         if (tab?.url) setPageUrl(tab.url);
       })
       .catch(console.error);
+
+    chrome.storage.local
+      .get('ariaTreeShowAll')
+      .then((stored) => {
+        if (stored.ariaTreeShowAll === true) setShowAll(true);
+      })
+      .catch(console.error);
   }, []);
 
-  // -------------------------------------------------------------------------
-  // Axe scan
-  // -------------------------------------------------------------------------
+  const handleToggleShowAll = useCallback(async (): Promise<void> => {
+    const next = !showAll;
+    setShowAll(next);
+    await chrome.storage.local.set({ ariaTreeShowAll: next });
+  }, [showAll]);
 
+  // Axe scan
   const runScan = useCallback(async (): Promise<void> => {
     setIsScanning(true);
     try {
@@ -168,10 +205,6 @@ export const SidePanel: React.FC = () => {
     void runScan();
   }, [runScan]);
 
-  // -------------------------------------------------------------------------
-  // Live violation count from content script mutation observer
-  // -------------------------------------------------------------------------
-
   useEffect(() => {
     const listener = (message: Message): void => {
       if (message.type === MessageType.VIOLATION_COUNT) {
@@ -188,9 +221,7 @@ export const SidePanel: React.FC = () => {
     };
   }, []);
 
-  // -------------------------------------------------------------------------
   // ARIA tree — lazy-loaded when the tree tab is first activated
-  // -------------------------------------------------------------------------
 
   const loadAriaTree = useCallback(async (): Promise<void> => {
     setIsLoadingTree(true);
@@ -217,10 +248,6 @@ export const SidePanel: React.FC = () => {
     }
     // Intentionally re-run when the tab is switched; violations list is stable.
   }, [activeTab]);
-
-  // -------------------------------------------------------------------------
-  // Filtering & grouping
-  // -------------------------------------------------------------------------
 
   const filteredViolations = useMemo((): Result[] => {
     const lc = searchQuery.toLowerCase();
@@ -252,30 +279,26 @@ export const SidePanel: React.FC = () => {
     );
   }, [filteredViolations]);
 
-  // -------------------------------------------------------------------------
-  // Derived display values
-  // -------------------------------------------------------------------------
-
   const totalCount = violations.length;
   // liveCount reflects DOM mutations; fall back to scan result count.
   const displayCount = liveCount ?? totalCount;
   const countBadgeColor = badgeColor(displayCount);
 
-  // -------------------------------------------------------------------------
-  // Render
-  // -------------------------------------------------------------------------
+  /** ARIA tree with optional noise pruning applied. */
+  const displayTree = useMemo(
+    () => (showAll ? ariaTree : pruneTree(ariaTree)),
+    [ariaTree, showAll]
+  );
 
   return (
     <div className="sidepanel">
-      {/* ------------------------------------------------------------------ */}
-      {/* Header                                                               */}
-      {/* ------------------------------------------------------------------ */}
       <header className="sidepanel__header">
         <div className="sidepanel__header-row">
-          <div className="sidepanel__brand">
-            <LogoIcon />
-            <span className="sidepanel__title">A11y Simulator</span>
-          </div>
+          {pageUrl && (
+            <p className="sidepanel__url" title={pageUrl} aria-label={`Current page: ${pageUrl}`}>
+              {truncateUrl(pageUrl)}
+            </p>
+          )}
 
           <div className="sidepanel__controls">
             <span
@@ -296,17 +319,8 @@ export const SidePanel: React.FC = () => {
             </button>
           </div>
         </div>
-
-        {pageUrl && (
-          <p className="sidepanel__url" title={pageUrl} aria-label={`Current page: ${pageUrl}`}>
-            {truncateUrl(pageUrl)}
-          </p>
-        )}
       </header>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Tab bar                                                              */}
-      {/* ------------------------------------------------------------------ */}
       <nav className="sidepanel__tabbar" role="tablist" aria-label="Side panel sections">
         <button
           className={`sidepanel__tab${activeTab === 'violations' ? ' sidepanel__tab--active' : ''}`}
@@ -332,9 +346,6 @@ export const SidePanel: React.FC = () => {
         </button>
       </nav>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Violations panel                                                     */}
-      {/* ------------------------------------------------------------------ */}
       <section
         id="panel-violations"
         role="tabpanel"
@@ -388,6 +399,7 @@ export const SidePanel: React.FC = () => {
               >
                 <h2 className="violation-group__header">
                   <span className="violation-group__criterion">{formatWcagCriterion(tag)}</span>
+                  <WcagVersionBadge wcagTag={tag} />
                   <span
                     className="violation-group__count"
                     aria-label={`${group.length} violations in this group`}
@@ -404,9 +416,6 @@ export const SidePanel: React.FC = () => {
         </div>
       </section>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* ARIA Tree panel                                                      */}
-      {/* ------------------------------------------------------------------ */}
       <section
         id="panel-aria-tree"
         role="tabpanel"
@@ -414,24 +423,40 @@ export const SidePanel: React.FC = () => {
         hidden={activeTab !== 'aria-tree'}
         className="sidepanel__panel sidepanel__panel--tree"
       >
+        <div className="aria-tree-toolbar">
+          <button
+            className="aria-tree__show-all-btn"
+            onClick={() => void handleToggleShowAll()}
+            type="button"
+            aria-pressed={showAll}
+          >
+            {showAll ? 'Semantic only' : 'Show all elements'}
+          </button>
+        </div>
+
         {isLoadingTree && (
           <p className="status-msg" role="status" aria-live="polite">
             Building accessibility tree…
           </p>
         )}
 
-        {!isLoadingTree && treeHasLoaded && ariaTree.length === 0 && (
+        {!isLoadingTree && treeHasLoaded && displayTree.length === 0 && (
           <p className="status-msg">No accessible elements found on this page.</p>
         )}
 
-        {!isLoadingTree && ariaTree.length > 0 && (
+        {!isLoadingTree && displayTree.length > 0 && (
           <div
             className="aria-tree-container"
             role="tree"
             aria-label="Accessibility tree of page elements"
           >
-            {ariaTree.map((node, i) => (
-              <AriaTreeNodeItem key={`root-${node.tagName}-${i}`} node={node} depth={0} />
+            {displayTree.map((node, i) => (
+              <AriaTreeNodeItem
+                key={`root-${node.tagName}-${i}`}
+                node={node}
+                depth={0}
+                showAll={showAll}
+              />
             ))}
           </div>
         )}

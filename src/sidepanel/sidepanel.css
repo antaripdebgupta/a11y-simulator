@@ -52,19 +52,6 @@ body {
   gap: 8px;
 }
 
-.sidepanel__brand {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.sidepanel__title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #111827;
-  letter-spacing: -0.01em;
-}
-
 .sidepanel__controls {
   display: flex;
   align-items: center;
@@ -112,14 +99,16 @@ body {
   cursor: not-allowed;
 }
 
-/* Truncated URL line */
+/* Truncated URL line — sits inside the header-row flex container */
 .sidepanel__url {
-  margin-top: 5px;
+  flex: 1;
+  min-width: 0;
   font-size: 11px;
   color: #6b7280;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin: 0;
 }
 
 .sidepanel__tabbar {
@@ -214,7 +203,8 @@ body {
   background: #f3f4f6;
 }
 
-.filter-bar__impact-btn--active {
+.filter-bar__impact-btn--active,
+.filter-bar__impact-btn--active:hover {
   background: #1d4ed8;
   border-color: #1d4ed8;
   color: #fff;
@@ -261,8 +251,7 @@ body {
 .violation-group__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   padding: 6px 4px;
   font-size: 11px;
   font-weight: 700;
@@ -273,6 +262,7 @@ body {
 
 .violation-group__criterion {
   color: #374151;
+  flex: 1;
 }
 
 .violation-group__count {
@@ -544,4 +534,62 @@ body {
   font-size: 11px;
   line-height: 1;
   color: #dc2626;
+}
+
+/* ---------------------------------------------------------------------------
+   ARIA tree toolbar (show-all toggle)
+--------------------------------------------------------------------------- */
+.aria-tree-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.aria-tree__show-all-btn {
+  padding: 3px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 99px;
+  background: #fff;
+  color: #374151;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+}
+
+.aria-tree__show-all-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.aria-tree__show-all-btn:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
+.aria-tree__show-all-btn[aria-pressed='true'] {
+  background: #eff6ff;
+  border-color: #1d4ed8;
+  color: #1d4ed8;
+}
+
+/* ---------------------------------------------------------------------------
+   WCAG version badge (violation group headers)
+--------------------------------------------------------------------------- */
+.wcag-version-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: default;
+  /* bg and color are provided via inline style */
 }

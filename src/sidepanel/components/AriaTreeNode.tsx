@@ -6,6 +6,7 @@ import { sendToActiveTab } from '../../shared/messaging';
 interface AriaTreeNodeItemProps {
   node: AriaTreeNode;
   depth: number;
+  showAll: boolean;
 }
 
 const WARNING_ICON = (
@@ -19,7 +20,7 @@ const WARNING_ICON = (
   </span>
 );
 
-export const AriaTreeNodeItem: React.FC<AriaTreeNodeItemProps> = ({ node, depth }) => {
+export const AriaTreeNodeItem: React.FC<AriaTreeNodeItemProps> = ({ node, depth, showAll }) => {
   // Nodes at depth 0-1 start expanded; deeper nodes start collapsed.
   const [expanded, setExpanded] = useState(depth < 2);
 
@@ -113,6 +114,7 @@ export const AriaTreeNodeItem: React.FC<AriaTreeNodeItemProps> = ({ node, depth 
               key={`${child.tagName}-${child.role}-${depth}-${index}`}
               node={child}
               depth={depth + 1}
+              showAll={showAll}
             />
           ))}
         </div>

@@ -100,7 +100,16 @@ const handleAxeScanRequest = async (
     console.debug(`[Service Worker] Axe scan complete: ${violations.length} violations found`);
     return { violations };
   } catch (error) {
-    console.error('[Service Worker] Axe scan request failed:', error);
+    const msg = error instanceof Error ? error.message : String(error);
+    if (
+      msg.includes('No tab with id') ||
+      msg.includes('was removed') ||
+      msg.includes('Frame with ID')
+    ) {
+      console.debug(`[Service Worker] Tab closed during axe scan (tab ${tabId})`);
+    } else {
+      console.error('[Service Worker] Axe scan request failed:', error);
+    }
     return { violations: [] };
   }
 };
