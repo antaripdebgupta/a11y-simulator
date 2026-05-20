@@ -1,7 +1,7 @@
 import type { Result } from 'axe-core';
 import axeCoreFileUrl from 'axe-core/axe.min.js?url';
 
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] as const;
+const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa', 'wcag22a'] as const;
 
 const toExtensionFilePath = (value: string): string => {
   if (!value) {
@@ -76,38 +76,95 @@ export const runAxeScanForTab = async (tabId: number): Promise<Result[]> => {
       files: [axeCoreFilePath],
     });
 
+    const rulesObj = {
+      'color-contrast': { enabled: true },
+      'color-contrast-enhanced': { enabled: true },
+      'heading-order': { enabled: true },
+      'select-name': { enabled: true },
+      'aria-input-field-name': { enabled: true },
+      'target-size': { enabled: true },
+      'button-name': { enabled: true },
+    };
+
+    console.debug('[Axe Runner] rules enabled:', rulesObj);
     console.debug('[Axe Runner] Running scan with tags:', WCAG_TAGS);
     // Step 2 — run the scan inside page context and return the raw violation objects.
     const scanResult = await chrome.scripting.executeScript({
       target: { tabId },
       world: 'ISOLATED',
-      args: [WCAG_TAGS],
-      func: async (tags) => {
+      args: [WCAG_TAGS, rulesObj],
+      func: async (tagsArg, rulesArg) => {
+        const tags = tagsArg as readonly string[];
+        const rules = rulesArg as Record<string, { enabled: boolean }>;
         try {
-          const maybeAxe = (globalThis as unknown as { axe?: { run?: Function } }).axe;
+          const maybeAxe = (
+            globalThis as unknown as { axe?: { run?: Function; configure?: Function } }
+          ).axe;
           if (typeof maybeAxe?.run !== 'function') {
             console.error('[Axe] axe.run not available after injection');
             return [];
           }
 
-          const results = await (
-            maybeAxe as {
-              run: (
-                context?: unknown,
-                options?: {
-                  runOnly?: { type: 'tag'; values: string[] };
-                  preload?: boolean;
-                }
-              ) => Promise<{ violations?: unknown[] }>;
+          if (typeof maybeAxe?.configure === 'function') {
+            maybeAxe.configure({
+              checks: [
+                {
+                  id: 'color-contrast',
+                  options: {
+                    ignorePseudo: false,
+                    contrastRatio: {
+                      normal: { expected: 4.5 },
+                      large: { expected: 3 },
+                    },
+                  },
+                },
+              ],
+            });
+          }
+
+          // Force axe to see explicit font sizes on tiny inherited-size elements
+          const forcedElements: HTMLElement[] = [];
+          document.querySelectorAll('span, p, div').forEach((el) => {
+            const htmlEl = el as HTMLElement;
+            const computed = window.getComputedStyle(htmlEl);
+            const size = parseFloat(computed.fontSize);
+            if (size > 0 && size < 14 && !htmlEl.style.fontSize) {
+              htmlEl.setAttribute('data-a11y-size-forced', computed.fontSize);
+              htmlEl.style.fontSize = computed.fontSize;
+              forcedElements.push(htmlEl);
             }
-          ).run(document, {
-            runOnly: { type: 'tag', values: [...tags] },
-            preload: false,
           });
 
-          const count = Array.isArray(results.violations) ? results.violations.length : 0;
+          let violations: unknown[] = [];
+          try {
+            const results = await (
+              maybeAxe as {
+                run: (
+                  context?: unknown,
+                  options?: {
+                    runOnly?: { type: 'tag'; values: string[] };
+                    rules?: Record<string, { enabled: boolean }>;
+                    preload?: boolean;
+                  }
+                ) => Promise<{ violations?: unknown[] }>;
+              }
+            ).run(document, {
+              runOnly: { type: 'tag', values: [...tags] },
+              rules,
+              preload: false,
+            });
+            violations = Array.isArray(results.violations) ? results.violations : [];
+          } finally {
+            // Clean up: remove all data-a11y-size-forced attributes and clear the forced inline styles
+            forcedElements.forEach((htmlEl) => {
+              htmlEl.removeAttribute('data-a11y-size-forced');
+              htmlEl.style.fontSize = '';
+            });
+          }
+
+          const count = violations.length;
           console.debug(`[Axe] Scan complete — ${count} violations`);
-          return Array.isArray(results.violations) ? results.violations : [];
+          return violations;
         } catch (err) {
           console.error('[Axe] Scan execution error:', err);
           return [];

@@ -1,9 +1,5 @@
-/**
- * Maps each WCAG success criterion number to the WCAG version in which it was
- * introduced: 2.0, 2.1, or 2.2.
- */
 const WCAG_CRITERIA_VERSION: Readonly<Record<string, '2.0' | '2.1' | '2.2'>> = {
-  // ── WCAG 2.0 ──────────────────────────────────────────────────────────────
+  // WCAG 2.0
   '1.1.1': '2.0',
   '1.2.1': '2.0',
   '1.2.2': '2.0',
@@ -17,6 +13,11 @@ const WCAG_CRITERIA_VERSION: Readonly<Record<string, '2.0' | '2.1' | '2.2'>> = {
   '1.4.2': '2.0',
   '1.4.3': '2.0',
   '1.4.4': '2.0',
+  '1.4.5': '2.0',
+  '1.4.6': '2.0',
+  '1.4.7': '2.0',
+  '1.4.8': '2.0',
+  '1.4.9': '2.0',
   '2.1.1': '2.0',
   '2.1.2': '2.0',
   '2.2.1': '2.0',
@@ -29,16 +30,26 @@ const WCAG_CRITERIA_VERSION: Readonly<Record<string, '2.0' | '2.1' | '2.2'>> = {
   '2.4.5': '2.0',
   '2.4.6': '2.0',
   '2.4.7': '2.0',
+  '2.4.8': '2.0',
+  '2.4.9': '2.0',
+  '2.4.10': '2.0',
   '3.1.1': '2.0',
   '3.1.2': '2.0',
   '3.2.1': '2.0',
   '3.2.2': '2.0',
+  '3.2.3': '2.0',
+  '3.2.4': '2.0',
+  '3.2.5': '2.0',
   '3.3.1': '2.0',
   '3.3.2': '2.0',
+  '3.3.3': '2.0',
+  '3.3.4': '2.0',
+  '3.3.5': '2.0',
+  '3.3.6': '2.0',
   '4.1.1': '2.0',
   '4.1.2': '2.0',
 
-  // ── WCAG 2.1 additions ────────────────────────────────────────────────────
+  // WCAG 2.1 additions
   '1.3.4': '2.1',
   '1.3.5': '2.1',
   '1.4.10': '2.1',
@@ -52,7 +63,7 @@ const WCAG_CRITERIA_VERSION: Readonly<Record<string, '2.0' | '2.1' | '2.2'>> = {
   '2.5.4': '2.1',
   '4.1.3': '2.1',
 
-  // ── WCAG 2.2 additions ────────────────────────────────────────────────────
+  // WCAG 2.2 additions
   '2.4.11': '2.2',
   '2.4.12': '2.2',
   '2.4.13': '2.2',
@@ -61,12 +72,57 @@ const WCAG_CRITERIA_VERSION: Readonly<Record<string, '2.0' | '2.1' | '2.2'>> = {
   '3.2.6': '2.2',
   '3.3.7': '2.2',
   '3.3.8': '2.2',
+  '3.3.9': '2.2',
 };
 
-/**
- * Returns the WCAG version for a given criterion code in dotted format
- * (e.g. "1.1.1", "2.4.11"), or `null` if the code is not recognised.
- */
 export function getWcagVersion(criterionCode: string): '2.0' | '2.1' | '2.2' | null {
   return WCAG_CRITERIA_VERSION[criterionCode] ?? null;
+}
+
+// Maps specific axe-core rule IDs to their primary WCAG success criterion code.
+
+const RULE_TO_CRITERION: Readonly<Record<string, string>> = {
+  'button-name': '4.1.2',
+  'select-name': '4.1.2',
+  'color-contrast': '1.4.3',
+  'color-contrast-enhanced': '1.4.6',
+  'heading-order': '2.4.6',
+  'aria-input-field-name': '4.1.2',
+  'image-alt': '1.1.1',
+  'link-name': '2.4.4',
+  label: '1.3.1',
+  'input-button-name': '4.1.2',
+  'aria-label': '4.1.2',
+  'aria-labelledby': '4.1.2',
+  'aria-required-attr': '4.1.2',
+  'aria-required-children': '1.3.1',
+  'aria-required-parent': '1.3.1',
+  'aria-roles': '4.1.2',
+  'aria-valid-attr': '4.1.2',
+  'aria-valid-attr-value': '4.1.2',
+  'duplicate-id-active': '4.1.1',
+  'duplicate-id-aria': '4.1.1',
+  'frame-title': '4.1.2',
+  'link-in-text-block': '1.4.1',
+  listitem: '1.3.1',
+  'definition-list': '1.3.1',
+  dlitem: '1.3.1',
+  list: '1.3.1',
+  marquee: '2.2.2',
+  'meta-refresh': '2.2.1',
+  'object-alt': '1.1.1',
+  'role-img-alt': '1.1.1',
+  'scope-attr-valid': '1.3.1',
+  'scrollable-region-focusable': '2.1.1',
+  'skip-link': '2.4.1',
+  tabindex: '2.4.3',
+  'td-headers-attr': '1.3.1',
+  'th-has-data-cells': '1.3.1',
+  'valid-lang': '3.1.2',
+  'video-caption': '1.2.2',
+  'target-size': '2.5.8',
+};
+
+export function getCriterionForRule(ruleId: string): string | null {
+  return RULE_TO_CRITERION[ruleId] ?? null;
 }
