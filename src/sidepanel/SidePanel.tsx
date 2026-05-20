@@ -22,20 +22,36 @@ import { sendToActiveTab } from '../shared/messaging';
 import { ViolationCard } from './components/ViolationCard';
 import { AriaTreeNodeItem } from './components/AriaTreeNode';
 import { FilterBar } from './components/FilterBar';
-import { getWcagVersion } from '../shared/wcag-criteria';
+import { getWcagVersion, getCriterionForRule } from '../shared/wcag-criteria';
 
 type ActiveTab = 'violations' | 'aria-tree';
-type ImpactFilter = 'All' | 'Critical' | 'Serious' | 'Moderate' | 'Minor';
+type ImpactFilter = 'All' | 'Critical' | 'Serious' | 'Moderate' | 'Minor' | 'Best Practice';
 
 const WCAG_TAG_RE = /^wcag\d{3,4}$/;
 const IMPACT_ORDER: string[] = ['critical', 'serious', 'moderate', 'minor'];
-const extractWcagTag = (tags: string[]): string => tags.find((t) => WCAG_TAG_RE.test(t)) ?? 'other';
+const WCAG_TAGGED_BEST_PRACTICE = new Set<string>(['heading-order']);
+
+const extractWcagTag = (tags: string[], ruleId?: string): string => {
+  let wcagTag = 'other';
+  if (ruleId) {
+    const code = getCriterionForRule(ruleId);
+    if (code) {
+      wcagTag = `wcag${code.replace(/\./g, '')}`;
+    }
+  }
+  if (wcagTag === 'other') {
+    wcagTag = tags.find((t) => WCAG_TAG_RE.test(t)) ?? 'other';
+  }
+  return ruleId ? `${wcagTag}::${ruleId}` : wcagTag;
+};
+
 const formatWcagCriterion = (tag: string): string => {
-  if (tag === 'other') return 'Other';
-  const d = tag.replace('wcag', '');
+  const baseTag = tag.split('::')[0] || '';
+  if (baseTag === 'other') return 'Other';
+  const d = baseTag.replace('wcag', '');
   if (d.length === 3) return `WCAG ${d[0]}.${d[1]}.${d[2]}`;
   if (d.length === 4) return `WCAG ${d[0]}.${d[1]}.${d[2]}${d[3]}`;
-  return tag.toUpperCase();
+  return baseTag.toUpperCase();
 };
 
 const sortByImpact = (a: Result, b: Result): number =>
@@ -50,7 +66,6 @@ const badgeColor = (count: number): string => {
   return '#b42318';
 };
 
-/** Extract a flat list of CSS selectors from all violation nodes. */
 const extractViolationSelectors = (violations: Result[]): string[] =>
   violations.flatMap((v) =>
     v.nodes.flatMap((n) =>
@@ -60,9 +75,9 @@ const extractViolationSelectors = (violations: Result[]): string[] =>
 
 const WCAG_CRITERION_RE = /^wcag(\d)(\d)(\d+)$/;
 
-/** "wcag111" → "1.1.1",  "wcag1413" → "1.4.13" */
 const tagToCriterionCode = (tag: string): string | null => {
-  const m = WCAG_CRITERION_RE.exec(tag);
+  const baseTag = tag.split('::')[0] || '';
+  const m = WCAG_CRITERION_RE.exec(baseTag);
   return m ? `${m[1]}.${m[2]}.${m[3]}` : null;
 };
 
@@ -146,20 +161,33 @@ const EmptyStateIcon: React.FC = () => (
   </svg>
 );
 
+const InfoIcon: React.FC = () => (
+  <svg
+    className="empty-state__icon"
+    width="56"
+    height="56"
+    viewBox="0 0 56 56"
+    fill="none"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <circle cx="28" cy="28" r="26" fill="#f3f4f6" stroke="#9ca3af" strokeWidth="2" />
+    <path d="M28 24v14" stroke="#6b7280" strokeWidth="4" strokeLinecap="round" />
+    <circle cx="28" cy="17" r="2.5" fill="#6b7280" />
+  </svg>
+);
+
 export const SidePanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('violations');
   const [violations, setViolations] = useState<Result[]>([]);
   const [ariaTree, setAriaTree] = useState<AriaTreeNode[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isLoadingTree, setIsLoadingTree] = useState(false);
-  /** True only after the first ARIA tree load attempt has completed. */
   const [treeHasLoaded, setTreeHasLoaded] = useState(false);
   const [pageUrl, setPageUrl] = useState('');
   const [impactFilter, setImpactFilter] = useState<ImpactFilter>('All');
   const [searchQuery, setSearchQuery] = useState('');
-  /** Live violation count pushed by the content script mutation observer. */
   const [liveCount, setLiveCount] = useState<number | null>(null);
-  /** When false, generic noise nodes are pruned from the ARIA tree. */
   const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
@@ -192,7 +220,7 @@ export const SidePanel: React.FC = () => {
         type: MessageType.REQUEST_AXE_SCAN,
       });
       setViolations(response?.violations ?? []);
-      setLiveCount(null); // reset live counter after a fresh scan
+      setLiveCount(null);
     } catch (err) {
       console.error('[SidePanel] Scan failed:', err);
     } finally {
@@ -252,8 +280,24 @@ export const SidePanel: React.FC = () => {
   const filteredViolations = useMemo((): Result[] => {
     const lc = searchQuery.toLowerCase();
     return violations.filter((v) => {
-      const matchImpact =
-        impactFilter === 'All' || (v.impact ?? '').toLowerCase() === impactFilter.toLowerCase();
+      const isPromoted = WCAG_TAGGED_BEST_PRACTICE.has(v.id);
+      const isBestPractice = v.tags.includes('best-practice') && !isPromoted;
+
+      let matchImpact = false;
+      if (impactFilter === 'Best Practice') {
+        matchImpact = isBestPractice;
+      } else {
+        if (isBestPractice) return false;
+
+        if (impactFilter === 'All') {
+          matchImpact = true;
+        } else if (impactFilter === 'Serious' && isPromoted) {
+          matchImpact = true;
+        } else {
+          matchImpact = (v.impact ?? '').toLowerCase() === impactFilter.toLowerCase();
+        }
+      }
+
       const matchSearch =
         !lc || v.id.toLowerCase().includes(lc) || v.help.toLowerCase().includes(lc);
       return matchImpact && matchSearch;
@@ -264,7 +308,7 @@ export const SidePanel: React.FC = () => {
   const groupedViolations = useMemo((): Map<string, Result[]> => {
     const map = new Map<string, Result[]>();
     for (const v of [...filteredViolations].sort(sortByImpact)) {
-      const tag = extractWcagTag(v.tags);
+      const tag = extractWcagTag(v.tags, v.id);
       const bucket = map.get(tag) ?? [];
       bucket.push(v);
       map.set(tag, bucket);
@@ -279,9 +323,23 @@ export const SidePanel: React.FC = () => {
     );
   }, [filteredViolations]);
 
-  const totalCount = violations.length;
+  const wcagTotalCount = useMemo(() => {
+    return violations.filter(
+      (v) => !v.tags.includes('best-practice') || WCAG_TAGGED_BEST_PRACTICE.has(v.id)
+    ).length;
+  }, [violations]);
+
+  const totalCount = useMemo(() => {
+    if (impactFilter === 'Best Practice') {
+      return violations.filter(
+        (v) => v.tags.includes('best-practice') && !WCAG_TAGGED_BEST_PRACTICE.has(v.id)
+      ).length;
+    }
+    return wcagTotalCount;
+  }, [violations, impactFilter, wcagTotalCount]);
+
   // liveCount reflects DOM mutations; fall back to scan result count.
-  const displayCount = liveCount ?? totalCount;
+  const displayCount = liveCount ?? wcagTotalCount;
   const countBadgeColor = badgeColor(displayCount);
 
   /** ARIA tree with optional noise pruning applied. */
@@ -319,6 +377,18 @@ export const SidePanel: React.FC = () => {
             </button>
           </div>
         </div>
+        <p
+          style={{
+            fontSize: '11px',
+            color: '#6b7280',
+            marginTop: '6px',
+            border: 'none',
+            padding: 0,
+          }}
+          className="sidepanel__subtitle"
+        >
+          Automated checks detect ~30–40% of WCAG issues. Use with manual testing.
+        </p>
       </header>
 
       <nav className="sidepanel__tabbar" role="tablist" aria-label="Side panel sections">
@@ -373,7 +443,7 @@ export const SidePanel: React.FC = () => {
           )}
 
           {/* Zero violations — green pass state */}
-          {!isScanning && totalCount === 0 && (
+          {!isScanning && violations.length === 0 && (
             <div className="empty-state" role="status">
               <EmptyStateIcon />
               <p className="empty-state__title">No violations found</p>
@@ -384,9 +454,17 @@ export const SidePanel: React.FC = () => {
             </div>
           )}
 
-          {/* Active filters returned nothing */}
-          {!isScanning && totalCount > 0 && filteredViolations.length === 0 && (
-            <p className="status-msg">No violations match the current filter.</p>
+          {/* Active filters returned nothing but violations exist */}
+          {!isScanning && violations.length > 0 && filteredViolations.length === 0 && (
+            <div className="empty-state" role="status">
+              <InfoIcon />
+              <p className="empty-state__title" style={{ color: '#4b5563' }}>
+                No violations match the current filter
+              </p>
+              <p className="empty-state__subtitle">
+                Try adjusting your search query or impact filters to see other violations.
+              </p>
+            </div>
           )}
 
           {/* Grouped violation cards */}

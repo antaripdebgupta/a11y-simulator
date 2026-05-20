@@ -58,21 +58,15 @@ export type ColourBlindMode =
 
 export interface HighlightElementPayload {
   /** Valid CSS selector string for the element to highlight */
-  selector: string;
+  selector?: string;
+  /** Multiple CSS selectors to highlight simultaneously */
+  selectors?: string[];
 }
 
 export interface RequestAriaTreePayload {
-  /**
-   * CSS selectors of violation nodes already known to the caller.
-   * The content script uses these to mark hasIssue on tree nodes.
-   */
   violationSelectors?: string[];
 }
 
-/**
- * A single node in the serialised accessibility tree.
- * Built by the content script and sent back to the side panel.
- */
 export interface AriaTreeNode {
   tagName: string;
   role: string;

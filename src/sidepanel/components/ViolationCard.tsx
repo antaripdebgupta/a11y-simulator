@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import type { Result } from 'axe-core';
 import { MessageType } from '../../shared/messages';
 import { sendToActiveTab } from '../../shared/messaging';
@@ -32,21 +32,29 @@ export const ViolationCard: React.FC<ViolationCardProps> = ({ violation }) => {
   const impact = violation.impact ?? 'minor';
   const impactStyle: ImpactStyle = IMPACT_STYLES[impact] ?? FALLBACK_IMPACT_STYLE;
 
-  const firstNode = violation.nodes[0];
-  const firstSelector = firstNode ? resolveSelector(firstNode.target[0]) : undefined;
+  const allSelectors = useMemo((): string[] => {
+    return violation.nodes
+      .flatMap((node) => node.target.map(resolveSelector))
+      .filter((sel): sel is string => typeof sel === 'string');
+  }, [violation.nodes]);
+
+  const firstSelector = allSelectors[0];
   const nodeCount = violation.nodes.length;
 
   const handleHighlight = useCallback(async (): Promise<void> => {
-    if (!firstSelector) return;
+    if (allSelectors.length === 0) return;
     try {
       await sendToActiveTab({
         type: MessageType.HIGHLIGHT_ELEMENT,
-        payload: { selector: firstSelector },
+        payload: {
+          selector: firstSelector,
+          selectors: allSelectors,
+        },
       });
     } catch (err) {
       console.error('[ViolationCard] Highlight failed:', err);
     }
-  }, [firstSelector]);
+  }, [firstSelector, allSelectors]);
 
   return (
     <article

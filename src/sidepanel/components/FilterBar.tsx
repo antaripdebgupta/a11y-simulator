@@ -1,6 +1,6 @@
 import React, { useId } from 'react';
 
-const IMPACT_LEVELS = ['All', 'Critical', 'Serious', 'Moderate', 'Minor'] as const;
+const IMPACT_LEVELS = ['All', 'Critical', 'Serious', 'Moderate', 'Minor', 'Best Practice'] as const;
 type ImpactLevel = (typeof IMPACT_LEVELS)[number];
 
 interface FilterBarProps {
